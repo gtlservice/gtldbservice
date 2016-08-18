@@ -7,7 +7,7 @@ import (
 	"os"
 	"os/signal"
 
-	"database/sql"
+	"errors"
 
 	"github.com/bitly/go-simplejson"
 
@@ -15,7 +15,9 @@ import (
 )
 
 const (
-	configFile = "./config.json"
+	configFile  = "./config.json"
+	dbTypemysql = 1
+	dbTypeMongo = 2
 )
 
 type mqConfig struct {
@@ -33,13 +35,25 @@ type dbinstance struct {
 	DbType string
 }
 
+type dbconnection struct {
+	connection interface{}
+	connType   int
+	hashIndex  int
+}
+
 func main() {
 	config := readConfig()
 	if config == nil {
 		log.Println("read config file config.json failed in current directory")
 		return
 	}
-	log.Println("config is :", config)
+
+	conns, err := initDbConnection(config)
+	if err != nil {
+		log.Println("init db connection failed")
+		return
+	}
+
 	mq, err := gtlmqhelper.New(config.MqURL, config.ExchangeName, config.ExchangeType)
 	if err != nil {
 		log.Println("create mq instance failed")
@@ -51,13 +65,7 @@ func main() {
 		return
 	}
 
-	db, err := sql.Open("mysql", "11111111")
-	if err != nil {
-		log.Println("sql open failed ", err)
-		return
-	}
-
-	err = mq.DoConsumer(onReadMsg, db)
+	err = mq.DoConsumer(onReadMsg, conns)
 	if err != nil {
 		log.Println("consumer msg failed")
 		return
@@ -74,13 +82,51 @@ func main() {
 
 }
 
+func getHashIndexByKey(key string) int {
+	return 0
+}
+
 func onReadMsg(msgType string, content string, contentLen int, userData interface{}) {
-	db, ok := userData.(sql.DB)
+	dbconns, ok := userData.([]dbconnection)
 	if !ok {
 		return
 	}
-	log.Println("readmsg db ", db)
 
+	//getHashIndexByKey()
+	//log.Println("readmsg db ", dbconnection)
+	//dbconns
+
+}
+
+func doMySQLConnection(url string) interface{} {
+	return nil
+}
+
+func doNoSQLConnection(url string) interface{} {
+	return nil
+}
+
+func initDbConnection(config *mqConfig) ([]dbconnection, error) {
+	var dbconnectons []dbconnection
+	dbs := config.dblist
+	for _, db := range dbs {
+		var conn dbconnection
+		switch db.DbType {
+		case "mysql":
+			conn.connection = doMySQLConnection(db.Dburl)
+			conn.connType = dbTypemysql
+			conn.hashIndex = db.Index
+		case "mongo":
+			conn.connection = doNoSQLConnection(db.Dburl)
+			conn.connType = dbTypeMongo
+			conn.hashIndex = db.Index
+		default:
+			log.Println("unknown sql type", db.DbType)
+			return nil, errors.New("unknown sql type")
+		}
+		dbconnectons = append(dbconnectons, conn)
+	}
+	return dbconnectons, nil
 }
 
 //read config.json file and parse
