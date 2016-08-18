@@ -4,12 +4,15 @@ import (
 	"gtlDbAPIService/mqHelper"
 	"io/ioutil"
 	"log"
+	"os"
+	"os/signal"
+
+	"database/sql"
 
 	"github.com/bitly/go-simplejson"
-)
 
-import "database/sql"
-import _ "github.com/go-sql-driver/mysql"
+	_ "github.com/go-sql-driver/mysql"
+)
 
 const (
 	configFile = "./config.json"
@@ -60,8 +63,14 @@ func main() {
 		return
 	}
 	log.Println("create mq client success!!!")
-
 	log.Println("gtl dbapi server start success...")
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	// Block until a signal is received.
+	s := <-c
+	log.Println("Got signal:", s)
+	log.Println("dbApiServer quit....")
 
 }
 
