@@ -25,6 +25,7 @@ func main() {
 		log.Println("read config file config.json failed in current directory")
 		return
 	}
+	log.Println("config is :", config)
 	mq, err := gtlmqhelper.New(config.MqURL, config.ExchangeName, config.ExchangeType)
 	if err != nil {
 		log.Println("create mq instance failed")
@@ -55,10 +56,13 @@ func readConfig() *mqConfig {
 	var err error
 	content, err = ioutil.ReadFile(configFile)
 	if err != nil {
+		log.Println(err)
 		return nil
 	}
+	log.Printf("content is : %s", content)
 	err = json.Unmarshal(content, &config)
 	if err != nil {
+		log.Println(err)
 		return nil
 	}
 	return &config

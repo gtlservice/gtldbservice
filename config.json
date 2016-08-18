@@ -1,0 +1,7 @@
+{
+"MqURL": "amqp://guest:guest@127.0.0.1:5672",
+ "ExchangeName" :"userdb_exchange",
+ "ExchangeType" : 2,
+ "QueueName":"userdb_queue",
+ "RoutingKey":"user_db.*"
+}
