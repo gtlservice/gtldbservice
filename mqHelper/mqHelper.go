@@ -3,6 +3,7 @@ package gtlmqhelper
 import "github.com/streadway/amqp"
 import "log"
 import "errors"
+import "time"
 
 const (
 	EXCHANGE_TYPE_DIRECT = 1
@@ -18,6 +19,26 @@ type MQService struct {
 	amqpReadQueue *amqp.Queue
 	exchangeName  string
 	readQueueName string
+}
+
+type MQMessage struct {
+	ContentType     string
+	ContentEncoding string
+	DeliveryMode    uint8
+	Priority        uint8
+	CorrelationId   string
+	ReplyTo         string
+	Expiration      string
+	MessageId       string
+	Timestamp       time.Time
+	Type            string
+	UserId          string
+	AppId           string
+	ConsumerTag     string
+	DeliveryTag     uint64
+	Exchange        string
+	RoutingKey      string
+	Body            []byte
 }
 
 var exchangeTypeMap = map[int]string{EXCHANGE_TYPE_DIRECT: "direct", EXCHANGE_TYPE_TOPIC: "topic", EXCHANGE_TYPE_FANOUT: "fanout"}
@@ -74,23 +95,41 @@ func (mq *MQService) CreateQueueAndBind(queueName string, routingKey string) err
 	return nil
 }
 
-func doMsgDelivery(msgs <-chan amqp.Delivery, mq *MQService, consumerCallback func(msgType string, content string, contentLen int)) {
+func getMqMsg(msg amqp.Delivery, mqMsg *MQMessage) {
+	mqMsg.AppId = msg.AppId
+	mqMsg.MessageId = msg.MessageId
+	mqMsg.ConsumerTag = msg.ConsumerTag
+	mqMsg.ContentEncoding = msg.ContentEncoding
+	mqMsg.ContentType = msg.ContentType
+	mqMsg.CorrelationId = msg.CorrelationId
+	mqMsg.DeliveryMode = msg.DeliveryMode
+	mqMsg.DeliveryTag = msg.DeliveryTag
+	mqMsg.Exchange = msg.Exchange
+	mqMsg.Expiration = msg.Expiration
+	mqMsg.Priority = msg.Priority
+	mqMsg.ReplyTo = msg.ReplyTo
+	mqMsg.RoutingKey = msg.RoutingKey
+	mqMsg.Timestamp = msg.Timestamp
+	mqMsg.Type = msg.Type
+	mqMsg.UserId = msg.UserId
+}
+
+func doMsgDelivery(msgs <-chan amqp.Delivery, mq *MQService, consumerCallback func(mqMsg *MQMessage, userData interface{}), userData interface{}) {
 	for msg := range msgs {
+		mqMsg := new(MQMessage)
+		getMqMsg(msg, mqMsg)
+		consumerCallback(mqMsg, userData)
 		msg.Ack(false)
-		contentType := msg.ContentType
-		content := string(msg.Body)
-		len := len(msg.Body)
-		consumerCallback(contentType, content, len)
 	}
 }
 
 //DoConsumer ..
-func (mq *MQService) DoConsumer(consumerCallback func(msgType string, content string, contentLen int)) error {
+func (mq *MQService) DoConsumer(consumerCallback func(mqMsg *MQMessage, userData interface{}), userData interface{}) error {
 	Msg, err := mq.amqpReadChan.Consume(mq.readQueueName, mq.readQueueName, false, false, false, false, nil)
 	if err != nil {
 		return errors.New("consumer failed")
 	}
-	go doMsgDelivery(Msg, mq, consumerCallback)
+	go doMsgDelivery(Msg, mq, consumerCallback, userData)
 	return nil
 }
 

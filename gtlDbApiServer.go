@@ -1,16 +1,15 @@
 package main
 
 import (
-	"gtlDbAPIService/mqHelper"
+	"errors"
+	"gtlservice/gtldbservice/mqHelper"
 	"io/ioutil"
 	"log"
 	"os"
 	"os/signal"
-
-	"errors"
+	"strings"
 
 	"github.com/bitly/go-simplejson"
-
 	_ "github.com/go-sql-driver/mysql"
 )
 
@@ -82,11 +81,19 @@ func main() {
 
 }
 
-func getHashIndexByKey(key string) int {
-	return 0
+func getHashByKey(key string) int {
+	var hash, index int
+	index = 1
+	strings.FieldsFunc(key, func(c rune) bool {
+		hash += index * int(c)
+		index++
+		return false
+	})
+	return hash
 }
 
-func onReadMsg(msgType string, content string, contentLen int, userData interface{}) {
+//接受从rabbitmq-server投递过来的消息
+func onReadMsg(msg *gtlmqhelper.MQMessage, userData interface{}) {
 	dbconns, ok := userData.([]dbconnection)
 	if !ok {
 		return
