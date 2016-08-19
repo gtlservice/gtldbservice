@@ -51,6 +51,7 @@ var dbHandleFunc = map[string]handleFunc{
 }
 
 var apiServerConfig *mqConfig
+var apiServerMQ *gtlmqhelper.MQService
 
 func handleRead(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 
@@ -97,7 +98,8 @@ func main() {
 		log.Println("consumer msg failed")
 		return
 	}
-	log.Println("create mq client success!!!")
+	apiServerMQ = mq
+
 	log.Println("gtl dbapi server start success...")
 
 	c := make(chan os.Signal, 1)
