@@ -13,19 +13,20 @@ const (
 	mysqlStateClosed = 2
 )
 
-type mysqlInstance struct {
+type MysqlInstance struct {
 	state int
 	url   string
 	conn  *sql.DB
 }
 
-func NewMysql() *mysqlInstance {
-	inst := new(mysqlInstance)
+//NewMysql ...
+func NewMysql() *MysqlInstance {
+	inst := new(MysqlInstance)
 	inst.state = mysqlStateClosed
 	return inst
 }
 
-func (m *mysqlInstance) openMysqlConnection(url string) error {
+func (m *MysqlInstance) openMysqlConnection(url string) error {
 	db, err := sql.Open("mysql", url)
 	if err != nil {
 		return errors.New("open mysql failed ")
@@ -35,14 +36,19 @@ func (m *mysqlInstance) openMysqlConnection(url string) error {
 		return errors.New("ping mysql failed")
 	}
 	m.conn = db
+	m.state = mysqlStateOpened
 	return nil
 }
 
-func (m *mysqlInstance) closeMysqlConnection() {
+func (m *MysqlInstance) closeMysqlConnection() {
 	m.conn.Close()
+	m.state = mysqlStateClosed
 }
 
-func (m *mysqlInstance) execInsert(sqlstr string) (int, error) {
+func (m *MysqlInstance) execMysqlInsert(sqlstr string) (int, error) {
+	if m.state == mysqlStateClosed {
+		return 0, errors.New("connections is closed")
+	}
 	Ret, err := m.conn.Exec(sqlstr)
 	if err != nil {
 		log.Println("insert data failed")
@@ -55,7 +61,10 @@ func (m *mysqlInstance) execInsert(sqlstr string) (int, error) {
 	return int(affected), nil
 }
 
-func (m *mysqlInstance) execRead(sqlstr string) (interface{}, error) {
+func (m *MysqlInstance) execMysqlRead(sqlstr string) (interface{}, error) {
+	if m.state == mysqlStateClosed {
+		return 0, errors.New("connections is closed")
+	}
 	row := m.conn.QueryRow(sqlstr)
 	var datarow interface{}
 	err := row.Scan(datarow)
@@ -65,7 +74,10 @@ func (m *mysqlInstance) execRead(sqlstr string) (interface{}, error) {
 	return datarow, nil
 }
 
-func (m *mysqlInstance) execUpdate(sqlstr string) (int, error) {
+func (m *MysqlInstance) execMysqlUpdate(sqlstr string) (int, error) {
+	if m.state == mysqlStateClosed {
+		return 0, errors.New("connections is closed")
+	}
 	ret, err := m.conn.Exec(sqlstr)
 	if err != nil {
 		return 0, errors.New("update failed")
@@ -77,7 +89,10 @@ func (m *mysqlInstance) execUpdate(sqlstr string) (int, error) {
 	return int(aff), nil
 }
 
-func (m *mysqlInstance) execDelete(sqlstr string) (int, error) {
+func (m *MysqlInstance) execMysqlDelete(sqlstr string) (int, error) {
+	if m.state == mysqlStateClosed {
+		return 0, errors.New("connections is closed")
+	}
 	ret, err := m.conn.Exec(sqlstr)
 	if err != nil {
 		return 0, errors.New("delete failed")

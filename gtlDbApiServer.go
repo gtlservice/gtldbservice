@@ -206,7 +206,9 @@ func onReadMsg(msg *gtlmqhelper.MQMessage, userData interface{}) {
 }
 
 func doMySQLConnection(url string) interface{} {
-	return nil
+	mysqlInst := NewMysql()
+	mysqlInst.openMysqlConnection(url)
+	return mysqlInst
 }
 
 func doNoSQLConnection(url string) interface{} {
