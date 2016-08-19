@@ -4,7 +4,7 @@
  "ExchangeType" : 2,
  "QueueName":"userdb_queue",
  "RoutingKey":"user_db.*",
- "dblist":[
+ "DBlist":[
 	{
 		"dburl":"user1:password1@tcp(localhost:5555)/dbname?charset=utf8",
 		"index":0,
@@ -25,5 +25,13 @@
 		"index":3,
 		"dbtype":"mysql"
 	}
+ ],
+ "AppDBTypeMap":[
+ {
+	"userdbapp":"mysql"
+ },
+ {
+	"treemanageapp":"mongodb"
+ }
  ]
 }

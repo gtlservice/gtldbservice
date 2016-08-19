@@ -26,6 +26,7 @@ type mqConfig struct {
 	QueueName    string
 	RoutingKey   string
 	dblist       []dbinstance
+	appDBTypeMap map[string]string
 }
 
 type dbinstance struct {
@@ -40,13 +41,40 @@ type dbconnection struct {
 	hashIndex  int
 }
 
+type handleFunc func(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection)
+
+var dbHandleFunc = map[string]handleFunc{
+	"READ":   handleRead,
+	"WRITE":  handleWrite,
+	"DELETE": handleDelete,
+	"UPDATE": handleUpdate,
+}
+
+var apiServerConfig *mqConfig
+
+func handleRead(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+
+}
+
+func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+
+}
+
+func handleDelete(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+
+}
+
+func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+
+}
+
 func main() {
 	config := readConfig()
 	if config == nil {
 		log.Println("read config file config.json failed in current directory")
 		return
 	}
-
+	apiServerConfig = config
 	conns, err := initDbConnection(config)
 	if err != nil {
 		log.Println("init db connection failed")
@@ -92,17 +120,87 @@ func getHashByKey(key string) int {
 	return hash
 }
 
+func getAppDbs(appId string, conns []dbconnection) []dbconnection {
+	dbType := apiServerConfig.appDBTypeMap[appId]
+	var dbTypeIndex int
+	switch dbType {
+	case "mysql":
+		dbTypeIndex = dbTypemysql
+	case "mongo":
+		dbTypeIndex = dbTypeMongo
+	default:
+		dbTypeIndex = -1
+	}
+	var selectedConns []dbconnection
+	for _, v := range conns {
+		if v.connType == dbTypeIndex {
+			selectedConns = append(selectedConns, v)
+		}
+	}
+	return selectedConns
+}
+
+func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
+	json, err := simplejson.NewJson([]byte(msg.Body))
+	if err != nil {
+		log.Println("parse msg to json failed")
+		return
+	}
+	appId, err := json.Get("app_id").String()
+	if err != nil {
+		log.Println("get app_id  failed")
+		return
+	}
+	reqId, err := json.Get("req_id").String()
+	if err != nil {
+		log.Println("get req_id  failed")
+		return
+	}
+	method, err := json.Get("method").String()
+	if err != nil {
+		log.Println("get method  failed")
+		return
+	}
+	keyName, err := json.Get("key_name").String()
+	if err != nil {
+		log.Println("get key_name  failed")
+		return
+	}
+	keyValue, err := json.Get("key_value").String()
+	if err != nil {
+		log.Println("get key_value  failed")
+		return
+	}
+	dataJson := json.Get("data")
+	if dataJson == nil {
+		log.Println("get data  failed")
+		return
+	}
+	dbConns := getAppDbs(appId, conns)
+	hash := getHashByKey(keyValue)
+	index := hash % len(dbConns)
+	conn := dbConns[index]
+	switch method {
+	case "READ":
+		dbHandleFunc["READ"](appId, reqId, keyName, keyValue, dataJson, &conn)
+	case "WRITE":
+		dbHandleFunc["WRITE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+	case "DELETE":
+		dbHandleFunc["DELETE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+	case "UPDATE":
+		dbHandleFunc["UPDATE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+	default:
+		log.Println("unknown method")
+	}
+}
+
 //接受从rabbitmq-server投递过来的消息
 func onReadMsg(msg *gtlmqhelper.MQMessage, userData interface{}) {
 	dbconns, ok := userData.([]dbconnection)
 	if !ok {
 		return
 	}
-
-	//getHashIndexByKey()
-	//log.Println("readmsg db ", dbconnection)
-	//dbconns
-
+	processMqMessage(msg, dbconns)
 }
 
 func doMySQLConnection(url string) interface{} {
@@ -142,6 +240,8 @@ func readConfig() *mqConfig {
 	var config mqConfig
 	var err error
 	var json *simplejson.Json
+	config.appDBTypeMap = map[string]string{}
+
 	content, err = ioutil.ReadFile(configFile)
 	if err != nil {
 		log.Println(err)
@@ -181,7 +281,7 @@ func readConfig() *mqConfig {
 		log.Println("parse routingkey failed")
 		return nil
 	}
-	dblist := json.Get("dblist")
+	dblist := json.Get("DBlist")
 	var dbs = make([]dbinstance, 0)
 	for i := 0; dblist.GetIndex(i) != nil; i++ {
 		var db dbinstance
@@ -205,6 +305,28 @@ func readConfig() *mqConfig {
 	}
 
 	config.dblist = dbs
+	//parse dbtype <---->app map section
+	dbMap := json.Get("AppDBTypeMap")
+	if dbMap == nil {
+		log.Println("get app2db	map section failed")
+		return nil
+	}
+
+	for j := 0; dbMap.GetIndex(j) != nil; j++ {
+		app2db, err := dbMap.GetIndex(j).Map()
+		if err != nil {
+			break
+		}
+		for k, v := range app2db {
+			s, ok := v.(string)
+			if ok {
+				config.appDBTypeMap[k] = s
+				log.Println("app :", k, "dbtype", s)
+			} else {
+				log.Println("get app ", k, "failed")
+			}
+		}
+	}
 
 	return &config
 }
