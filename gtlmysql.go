@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"errors"
 	"log"
+	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -102,4 +103,18 @@ func (m *MysqlInstance) execMysqlDelete(sqlstr string) (int, error) {
 		return 0, errors.New("delete failed2")
 	}
 	return int(aff), nil
+}
+
+//return affected lines or error
+func (m *MysqlInstance) writeUserInfo(acc_name, password, secureQuestion, secureAnswer, email, phoneNumber string) (int, error) {
+	if m.state == mysqlStateClosed {
+		return 0, errors.New("connections is closed")
+	}
+	sql := "insert into gtl_user(acc_name password secure_question secure_answer email phone_number) values ("
+	sql = strings.Join([]string{sql, acc_name, password, secureQuestion, secureAnswer, email, phoneNumber})
+	affect, err := m.execMysqlInsert(sql)
+	if err != nil {
+		return 0, err
+	}
+	return affect, nil
 }

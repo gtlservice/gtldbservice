@@ -53,11 +53,49 @@ var dbHandleFunc = map[string]handleFunc{
 var apiServerConfig *mqConfig
 var apiServerMQ *gtlmqhelper.MQService
 
+//id acc_name password secure_question secure_answer email phone_number
 func handleRead(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 
 }
 
 func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+	acc_name, err := data.Get("acc_name").String()
+	if err != nil {
+		log.Println("get acc_name err", err)
+		return
+	}
+	password, err := data.Get("password").String()
+	if err != nil {
+		log.Println("get password err", err)
+		return
+	}
+	secureQuestion, err := data.Get("secure_question").String()
+	if err != nil {
+		log.Println("get secure_question failed")
+	}
+	secureAnswer, err := data.Get("secure_answer").String()
+	if err != nil {
+		log.Println("get secure_answer failed")
+	}
+	email, err := data.Get("email").String()
+	if err != nil {
+		log.Println("get email failed")
+		return
+	}
+	phoneNumber, err := data.Get("phone_number").String()
+	if err != nil {
+		log.Println("get phone number failed")
+	}
+
+	db, ok := conn.connection.(MysqlInstance)
+	if ok {
+		aff, err := db.writeUserInfo(acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
+		if err != nil {
+
+		}
+	} else {
+		log.Println("execute write failed, connection error")
+	}
 
 }
 
@@ -67,6 +105,10 @@ func handleDelete(appId, reqId, keyName, keyValue string, data *simplejson.Json,
 
 func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 
+}
+
+func doResponse(data, reqId, appId string) {
+	apiServerMQ.DeliveryMsg(data)
 }
 
 func main() {

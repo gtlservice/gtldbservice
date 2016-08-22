@@ -7,7 +7,19 @@ key="" //username as a hash key
 
 
 用户表
-id username password secure_question secure_answer email phone_number
+id acc_name password secure_question secure_answer email phone_number
+
+create database gtl_user;
+use gtl_user;
+create table user_info(
+id int(4) not null primary key auto_increment, 
+acc_name char(50) not null,
+password char(50) not null, 
+secure_question char(50),
+secure_answer char(50),
+email char(30) not null,
+phone_number char(20)
+);
 
 //添加用户
 {//request
@@ -16,7 +28,7 @@ id username password secure_question secure_answer email phone_number
 'method':"WRITE"
 'key_name':"name"  //username as hash key
 'key_value''maji'
-'data':"{"name":"maji",
+'data':"{"acc_name":"maji",
 		"password":"123",
 		"secure_question": "我的生日",
 		"secure_answer":"1990/09/15",
