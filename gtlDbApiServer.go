@@ -21,13 +21,14 @@ const (
 )
 
 type mqConfig struct {
-	MqURL        string
-	ExchangeName string
-	ExchangeType int
-	QueueName    string
-	RoutingKey   string
-	dblist       []dbinstance
-	appDBTypeMap map[string]string
+	MqURL          string
+	ExchangeName   string
+	ExchangeType   int
+	QueueName      string
+	ReqRoutingKey  string
+	RespRoutingKey string
+	dblist         []dbinstance
+	appDBTypeMap   map[string]string
 }
 
 type dbinstance struct {
@@ -133,7 +134,7 @@ func makeRespHeader(appId, respId, result string) (string, error) {
 }
 
 func doResponse(data, reqId, appId string) {
-	err := apiServerMQ.DeliveryMsg("text/json", "userinfo.user", data, len(data))
+	err := apiServerMQ.DeliveryMsg("text/json", apiServerConfig.RespRoutingKey, data, len(data))
 	if err != nil {
 		log.Println("mq deliver msg failed")
 	}
@@ -157,7 +158,7 @@ func main() {
 		log.Println("create mq instance failed")
 		return
 	}
-	err = mq.CreateQueueAndBind(config.QueueName, config.RoutingKey)
+	err = mq.CreateQueueAndBind(config.QueueName, config.ReqRoutingKey)
 	if err != nil {
 		log.Println("create queue failed")
 		return
@@ -355,11 +356,18 @@ func readConfig() *mqConfig {
 		return nil
 	}
 
-	config.RoutingKey, err = json.Get("RoutingKey").String()
+	config.ReqRoutingKey, err = json.Get("ReqRoutingKey").String()
 	if err != nil {
-		log.Println("parse routingkey failed")
+		log.Println("parse req routingkey failed")
 		return nil
 	}
+
+	config.RespRoutingKey, err = json.Get("RespRoutingKey").String()
+	if err != nil {
+		log.Println("parse resp routingkey failed")
+		return nil
+	}
+
 	dblist := json.Get("DBlist")
 	var dbs = make([]dbinstance, 0)
 	for i := 0; dblist.GetIndex(i) != nil; i++ {

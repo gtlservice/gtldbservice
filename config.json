@@ -1,9 +1,10 @@
 {
  "MqURL": "amqp://guest:guest@127.0.0.1:5672",
  "ExchangeName" :"userdb_exchange",
- "ExchangeType" : 2,
+ "ExchangeType" : 2, //1 direct 2 topic 3 fanout
  "QueueName":"userdb_queue",
- "RoutingKey":"user_db.req",
+ "ReqRoutingKey":"user_db.req",
+ "RespRoutingKey":"user_db.resp"
  "DBlist":[
 	{
 		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
