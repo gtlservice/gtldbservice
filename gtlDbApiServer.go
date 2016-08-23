@@ -277,7 +277,12 @@ func onReadMsg(msg *gtlmqhelper.MQMessage, userData interface{}) {
 
 func doMySQLConnection(url string) interface{} {
 	mysqlInst := NewMysql()
-	mysqlInst.openMysqlConnection(url)
+	err := mysqlInst.openMysqlConnection(url)
+	if err != nil {
+		log.Println("connect ", url, " failed error:", err)
+		return nil
+	}
+	log.Println("connect ", url, " success!!")
 	return mysqlInst
 }
 

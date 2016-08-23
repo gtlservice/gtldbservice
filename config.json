@@ -6,22 +6,22 @@
  "RoutingKey":"user_db.*",
  "DBlist":[
 	{
-		"dburl":"user1:password1@tcp(localhost:5555)/dbname?charset=utf8",
+		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
 		"index":0,
 		"dbtype":"mysql"
 	},
 	{
-		"dburl":"user1:password1@tcp(localhost:5555)/dbname?charset=utf8",
+		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
 		"index":1,
 		"dbtype":"mysql"
 	},
 	{
-		"dburl":"user1:password1@tcp(localhost:5555)/dbname?charset=utf8",
+		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
 		"index":2,
 		"dbtype":"mysql"
 	},
 	{
-		"dburl":"user1:password1@tcp(localhost:5555)/dbname?charset=utf8",
+		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
 		"index":3,
 		"dbtype":"mysql"
 	}
