@@ -3,8 +3,8 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"log"
-	"strings"
 
 	_ "github.com/go-sql-driver/mysql"
 )
@@ -110,9 +110,9 @@ func (m *MysqlInstance) writeUserInfo(acc_name, password, secureQuestion, secure
 	if m.state == mysqlStateClosed {
 		return 0, errors.New("connections is closed")
 	}
-	sql := "insert into gtl_user(acc_name password secure_question secure_answer email phone_number) values ("
-	sql = strings.Join([]string{sql, acc_name, password, secureQuestion, secureAnswer, email, phoneNumber})
-	affect, err := m.execMysqlInsert(sql)
+	sql := "insert into gtl_user(acc_name password secure_question secure_answer email phone_number) values ('%s', '%s', '%s', '%s', '%s', '%s')"
+	sql2 := fmt.Sprintf(sql, acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
+	affect, err := m.execMysqlInsert(sql2)
 	if err != nil {
 		return 0, err
 	}

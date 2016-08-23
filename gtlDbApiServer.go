@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"gtlservice/gtldbservice/mqHelper"
 	"io/ioutil"
 	"log"
@@ -91,8 +92,27 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 	if ok {
 		aff, err := db.writeUserInfo(acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
 		if err != nil {
-
+			log.Println("write userinfo failed", err)
+			header, err := makeRespHeader(appId, reqId, "insert user info failed")
+			if err != nil {
+				log.Println("make response header failed")
+				return
+			}
+			resp, err := simplejson.NewJson([]byte(header))
+			if err != nil {
+				log.Println("make response json failed")
+				return
+			}
+			ret := fmt.Sprintf("affect rows %d", aff)
+			resp.Set("data", ret)
+			finalResp, err := resp.MarshalJSON()
+			if err != nil {
+				log.Println("marshaljson failed")
+				return
+			}
+			doResponse(string(finalResp), reqId, appId)
 		}
+
 	} else {
 		log.Println("execute write failed, connection error")
 	}
@@ -107,8 +127,16 @@ func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json,
 
 }
 
+func makeRespHeader(appId, respId, result string) (string, error) {
+	header := fmt.Sprintf("{'app_id' : '%s', 'resp_id': '%s', 'response_result':'%s'}", appId, respId, result)
+	return header, nil
+}
+
 func doResponse(data, reqId, appId string) {
-	apiServerMQ.DeliveryMsg(data)
+	err := apiServerMQ.DeliveryMsg("text/json", "userinfo.user", data, len(data))
+	if err != nil {
+		log.Println("mq deliver msg failed")
+	}
 }
 
 func main() {
