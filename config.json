@@ -3,7 +3,7 @@
  "ExchangeName" :"userdb_exchange",
  "ExchangeType" : 2,
  "QueueName":"userdb_queue",
- "RoutingKey":"user_db.*",
+ "RoutingKey":"user_db.req",
  "DBlist":[
 	{
 		"dburl":"root:9818437@tcp(138.128.204.211:3306)/gtl_user?charset=utf8",
