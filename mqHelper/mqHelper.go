@@ -112,6 +112,7 @@ func getMqMsg(msg amqp.Delivery, mqMsg *MQMessage) {
 	mqMsg.Timestamp = msg.Timestamp
 	mqMsg.Type = msg.Type
 	mqMsg.UserId = msg.UserId
+	mqMsg.Body = msg.Body
 }
 
 func doMsgDelivery(msgs <-chan amqp.Delivery, mq *MQService, consumerCallback func(mqMsg *MQMessage, userData interface{}), userData interface{}) {

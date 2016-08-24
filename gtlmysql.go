@@ -50,15 +50,17 @@ func (m *MysqlInstance) execMysqlInsert(sqlstr string) (int, error) {
 	if m.state == mysqlStateClosed {
 		return 0, errors.New("connections is closed")
 	}
+
 	Ret, err := m.conn.Exec(sqlstr)
 	if err != nil {
-		log.Println("insert data failed")
+		log.Println("insert data failed", err)
 		return 0, errors.New("insert failed")
 	}
 	affected, err := Ret.RowsAffected()
 	if err != nil {
 		return 0, errors.New("insert data failed")
 	}
+	log.Println("affected rows ", affected)
 	return int(affected), nil
 }
 
@@ -110,7 +112,7 @@ func (m *MysqlInstance) writeUserInfo(acc_name, password, secureQuestion, secure
 	if m.state == mysqlStateClosed {
 		return 0, errors.New("connections is closed")
 	}
-	sql := "insert into gtl_user(acc_name password secure_question secure_answer email phone_number) values ('%s', '%s', '%s', '%s', '%s', '%s')"
+	sql := "insert into user_info(acc_name, password, secure_question, secure_answer, email, phone_number) values ('%s', '%s', '%s', '%s', '%s', '%s')"
 	sql2 := fmt.Sprintf(sql, acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
 	affect, err := m.execMysqlInsert(sql2)
 	if err != nil {
