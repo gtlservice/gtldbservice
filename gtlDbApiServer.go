@@ -9,15 +9,18 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 
 	"github.com/bitly/go-simplejson"
 	_ "github.com/go-sql-driver/mysql"
 )
 
 const (
-	configFile  = "./config.json"
-	dbTypemysql = 1
-	dbTypeMongo = 2
+	configFile     = "./config.json"
+	dbTypemysql    = 1
+	dbTypeMongo    = 2
+	connStateFree  = 0
+	connStateInuse = 1
 )
 
 type mqConfig struct {
@@ -41,6 +44,8 @@ type dbconnection struct {
 	connection interface{}
 	connType   int
 	hashIndex  int
+	state      int //0 free 1 inuse
+	stateLock  *sync.Mutex
 }
 
 type handleFunc func(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection)
@@ -55,23 +60,77 @@ var dbHandleFunc = map[string]handleFunc{
 var apiServerConfig *mqConfig
 var apiServerMQ *gtlmqhelper.MQService
 
+func createJsonData(record []record) (string, error) {
+	var json string = "["
+	var objs []string
+	for _, v := range record {
+		id := v.line["id"]
+		accName := v.line["acc_name"]
+		password := v.line["password"]
+		secure_question := v.line["secure_question"]
+		secure_answer := v.line["secure_answer"]
+		email := v.line["email"]
+		phone_number := v.line["phone_number"]
+		obj := fmt.Sprintf(`{\"id\": %d, \"acc_name\":\"%s\", 
+			\"password\":\"%s\", 
+			\"secure_question\":\"%s\", 
+			\"secure_answer\":\"%s\",
+		   \"email\":\"%s\", 
+	       \"phone_number\":\"%s\"}`, id, accName, password, secure_question, secure_answer, email, phone_number)
+		objs = append(objs, obj)
+	}
+	jsonObjs := strings.Join(objs, ",")
+	json = jsonObjs + "]"
+	return json, nil
+}
+
 //id acc_name password secure_question secure_answer email phone_number
 func handleRead(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+	db, ok := conn.connection.(*MysqlInstance)
+	if !ok {
+		log.Println("read failed ")
+		doResponse(reqId, appId, "connection is error", false, 0)
+		return
+	}
+	affect, record, err := db.readUserInfo(keyName, keyValue)
+	if err != nil {
+		log.Println("read userinfo failed")
+		doResponse(reqId, appId, "read error", false, 0)
+		return
+	}
+	if affect == 0 {
+		log.Println("read userinfo failed")
+		doResponse(reqId, appId, "empty record", false, 0)
+		return
+	}
+	json, err := createJsonData(record)
+	if err != nil {
+		doResponse(reqId, appId, "convert record to json failed", false, 0)
+		return
+	}
 
+	doResponseWithData(reqId, appId, "ok", json, true, affect)
 }
 
 func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 
 	var result string
-	var isok bool
+	var isok bool = false
+	if conn == nil {
+		doResponse(reqId, appId, "connection is busy", false, 0)
+		return
+	}
+
 	acc_name, err := data.Get("acc_name").String()
 	if err != nil {
 		log.Println("get acc_name err", err)
+		doResponse(reqId, appId, "acc_name is error", isok, 0)
 		return
 	}
 	password, err := data.Get("password").String()
 	if err != nil {
 		log.Println("get password err", err)
+		doResponse(reqId, appId, "password is error", isok, 0)
 		return
 	}
 	secureQuestion, err := data.Get("secure_question").String()
@@ -85,6 +144,7 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 	email, err := data.Get("email").String()
 	if err != nil {
 		log.Println("get email failed")
+		doResponse(reqId, appId, "email is error", isok, 0)
 		return
 	}
 	phoneNumber, err := data.Get("phone_number").String()
@@ -95,6 +155,9 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 	db, ok := conn.connection.(*MysqlInstance)
 	if ok {
 		aff, err := db.writeUserInfo(acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
+		conn.stateLock.Lock()
+		conn.state = connStateFree
+		conn.stateLock.Unlock()
 		if err != nil {
 			log.Println("write userinfo failed", err)
 			result = "insert user info failed"
@@ -104,29 +167,10 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 			result = "ok"
 			isok = true
 		}
-		header, err := makeRespHeader(appId, reqId, result)
-		if err != nil {
-			log.Println("make response header failed", header)
-			return
-		}
-		resp, err := simplejson.NewJson([]byte(header))
-		if err != nil {
-			log.Println("make response json failed . ", header)
-			return
-		}
-		if isok {
-			ret := fmt.Sprintf("affect rows %d", aff)
-			resp.Set("data", ret)
-		}
-		finalResp, err := resp.MarshalJSON()
-		if err != nil {
-			log.Println("marshaljson failed")
-			return
-		}
-		doResponse(string(finalResp), reqId, appId)
+		doResponse(reqId, appId, result, isok, aff)
 
 	} else {
-		log.Println("execute write failed, connection error", conn.connection)
+		log.Println("execute write failed, connection error: ", conn.connection)
 	}
 
 }
@@ -139,18 +183,37 @@ func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json,
 
 }
 
-func makeRespHeader(appId, respId, result string) (string, error) {
-	header := fmt.Sprintf("{\"app_id\" : \"%s\", \"resp_id\": \"%s\", \"response_result\":\"%s\"}", appId, respId, result)
+func makeRespHeader(appId, respId, result, data string) (string, error) {
+	header := fmt.Sprintf("{\"app_id\" : \"%s\", \"resp_id\": \"%s\", \"response_result\":\"%s\", \"data\":\"%s\"}", appId, respId, result, data)
 	return header, nil
 }
 
-func doResponse(data, reqId, appId string) {
-
-	err := apiServerMQ.DeliveryMsg("text/json", apiServerConfig.RespRoutingKey, data, len(data))
+func doResponseWithData(reqId, appId, stringResult, data string, result bool, affectedRows int) {
+	header, err := makeRespHeader(appId, reqId, stringResult, data)
+	if err != nil {
+		log.Println("make response header failed", header)
+		return
+	}
+	resp, err := simplejson.NewJson([]byte(header))
+	if err != nil {
+		log.Println("make response json failed . ", header)
+		return
+	}
+	finalResp, err := resp.MarshalJSON()
+	if err != nil {
+		log.Println("marshaljson failed")
+		return
+	}
+	err = apiServerMQ.DeliveryMsg("text/json", apiServerConfig.RespRoutingKey, string(finalResp), len(finalResp))
 	if err != nil {
 		log.Println("mq deliver msg failed")
 	}
-	log.Println("delivery response ", data, " ok")
+	log.Println("delivery response ", finalResp, " ok")
+}
+
+func doResponse(reqId, appId, stringResult string, result bool, affectedRows int) {
+	ret := fmt.Sprintf("affect rows %d", affectedRows)
+	doResponseWithData(reqId, appId, stringResult, ret, result, affectedRows)
 }
 
 func main() {
@@ -271,7 +334,14 @@ func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
 	}
 	hash := getHashByKey(keyValue)
 	index := hash % len(dbConns)
-	conn := dbConns[index]
+	var conn dbconnection
+	dbConns[index].stateLock.Lock()
+	if dbConns[index].state == 0 {
+		conn := dbConns[index]
+		conn.state = connStateInuse
+	}
+	dbConns[index].stateLock.Unlock()
+
 	switch method {
 	case "READ":
 		dbHandleFunc["READ"](appId, reqId, keyName, keyValue, dataJson, &conn)
@@ -320,10 +390,14 @@ func initDbConnection(config *mqConfig) ([]dbconnection, error) {
 			conn.connection = doMySQLConnection(db.Dburl)
 			conn.connType = dbTypemysql
 			conn.hashIndex = db.Index
+			conn.stateLock = new(sync.Mutex)
+			conn.state = connStateFree
 		case "mongo":
 			conn.connection = doNoSQLConnection(db.Dburl)
 			conn.connType = dbTypeMongo
 			conn.hashIndex = db.Index
+			conn.stateLock = new(sync.Mutex)
+			conn.state = connStateFree
 		default:
 			log.Println("unknown sql type", db.DbType)
 			return nil, errors.New("unknown sql type")

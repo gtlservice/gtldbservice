@@ -14,10 +14,16 @@ const (
 	mysqlStateClosed = 2
 )
 
+type record struct {
+	line map[string]interface{}
+}
+
 type MysqlInstance struct {
 	state int
 	url   string
 	conn  *sql.DB
+	rows  *sql.Rows
+	data  []record
 }
 
 //NewMysql ...
@@ -64,17 +70,15 @@ func (m *MysqlInstance) execMysqlInsert(sqlstr string) (int, error) {
 	return int(affected), nil
 }
 
-func (m *MysqlInstance) execMysqlRead(sqlstr string) (interface{}, error) {
+func (m *MysqlInstance) execMysqlRead(sqlstr string) (*sql.Rows, error) {
 	if m.state == mysqlStateClosed {
-		return 0, errors.New("connections is closed")
+		return nil, errors.New("connections is closed")
 	}
-	row := m.conn.QueryRow(sqlstr)
-	var datarow interface{}
-	err := row.Scan(datarow)
+	rows, err := m.conn.Query(sqlstr)
 	if err != nil {
-		return nil, errors.New("read failed")
+		return nil, errors.New("read mysql failed")
 	}
-	return datarow, nil
+	return rows, nil
 }
 
 func (m *MysqlInstance) execMysqlUpdate(sqlstr string) (int, error) {
@@ -119,4 +123,35 @@ func (m *MysqlInstance) writeUserInfo(acc_name, password, secureQuestion, secure
 		return 0, err
 	}
 	return affect, nil
+}
+
+func (m *MysqlInstance) readUserInfo(key, keyValue string) (int, []record, error) {
+	if m.state == mysqlStateClosed {
+		return 0, nil, errors.New("connections is closed")
+	}
+	sql := "select * from  user_info where '%s' = '%s'"
+	sql2 := fmt.Sprintf(sql, key, keyValue)
+	rows, err := m.execMysqlRead(sql2)
+	if err != nil {
+		return 0, nil, err
+	}
+	m.rows = rows
+	m.data = make([]record, 1)
+	var id, cnt int
+	var accName, password, secure_question, secure_answer, email, phone_number string
+	for m.rows.Next() {
+		var aRecord record
+		aRecord.line = map[string]interface{}{}
+		rows.Scan(&id, &accName, &password, &secure_question, &secure_answer, &email, &phone_number)
+		aRecord.line["id"] = id
+		aRecord.line["acc_name"] = accName
+		aRecord.line["password"] = password
+		aRecord.line["secure_question"] = secure_question
+		aRecord.line["secure_answer"] = secure_answer
+		aRecord.line["email"] = email
+		aRecord.line["phone_number"] = phone_number
+		m.data = append(m.data, aRecord)
+		cnt++
+	}
+	return cnt, m.data, nil
 }
