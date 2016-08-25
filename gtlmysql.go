@@ -129,8 +129,10 @@ func (m *MysqlInstance) readUserInfo(key, keyValue string) (int, []record, error
 	if m.state == mysqlStateClosed {
 		return 0, nil, errors.New("connections is closed")
 	}
-	sql := "select * from  user_info where '%s' = '%s'"
+	sql := "select * from  user_info where %s ='%s'"
+
 	sql2 := fmt.Sprintf(sql, key, keyValue)
+	log.Println("read sql :", sql2)
 	rows, err := m.execMysqlRead(sql2)
 	if err != nil {
 		return 0, nil, err
@@ -141,7 +143,7 @@ func (m *MysqlInstance) readUserInfo(key, keyValue string) (int, []record, error
 	var accName, password, secure_question, secure_answer, email, phone_number string
 	for m.rows.Next() {
 		var aRecord record
-		aRecord.line = map[string]interface{}{}
+		aRecord.line = make(map[string]interface{})
 		rows.Scan(&id, &accName, &password, &secure_question, &secure_answer, &email, &phone_number)
 		aRecord.line["id"] = id
 		aRecord.line["acc_name"] = accName

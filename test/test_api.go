@@ -11,19 +11,7 @@ func onRead(mqMsg *gtlmqhelper.MQMessage, userData interface{}) {
 	log.Println("recv resp message:", string(mqMsg.Body))
 }
 
-func main() {
-	mq, err := gtlmqhelper.New("amqp://guest:guest@127.0.0.1:5672", "userdb_exchange", 2)
-	if err != nil {
-		log.Println("connect mq failed")
-		return
-	}
-	err = mq.CreateQueueAndBind("testqueue", "user_db.resp")
-	if err != nil {
-		log.Println("create testqueue failed")
-		return
-	}
-
-	mq.DoConsumer(onRead, mq)
+func testWrite(mq *gtlmqhelper.MQService) {
 	var msg = string(`{
     "app_id":"gtlUserDb",
     "req_id":"6e760338-5eb3-4858-a4a7-7eb942255e8c",
@@ -37,11 +25,45 @@ func main() {
             "email":"test@gmail.com",
             "phone_number":"186920298475"}
     }`)
-	err = mq.DeliveryMsg("text/json", "user_db.req", msg, len(msg))
+	err := mq.DeliveryMsg("text/json", "user_db.req", msg, len(msg))
 	if err != nil {
 		log.Println("delivery msg error ", err)
 	}
-	log.Println("deliver msg success ", msg)
+	log.Println("deliver write msg success ", msg)
+}
+
+func testRead(mq *gtlmqhelper.MQService) {
+	var msg = string(`{
+    "app_id":"gtlUserDb",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb942255111",
+    "method":"READ",
+    "key_name":"acc_name",
+    "key_value":"maji",
+    "data":""}`)
+	err := mq.DeliveryMsg("text/json", "user_db.req", msg, len(msg))
+	if err != nil {
+		log.Println("delivery msg error ", err)
+	}
+	log.Println("deliver read msg success ", msg)
+}
+
+func main() {
+	mq, err := gtlmqhelper.New("amqp://guest:guest@127.0.0.1:5672", "userdb_exchange", 2)
+	if err != nil {
+		log.Println("connect mq failed")
+		return
+	}
+	err = mq.CreateQueueAndBind("testqueue", "user_db.resp")
+	if err != nil {
+		log.Println("create testqueue failed")
+		return
+	}
+
+	mq.DoConsumer(onRead, mq)
+
+	go testWrite(mq)
+
+	go testRead(mq)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

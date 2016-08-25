@@ -61,9 +61,12 @@ var apiServerConfig *mqConfig
 var apiServerMQ *gtlmqhelper.MQService
 
 func createJsonData(record []record) (string, error) {
-	var json string = "["
+	var json string = `[`
 	var objs []string
 	for _, v := range record {
+		if v.line["id"] == nil {
+			continue
+		}
 		id := v.line["id"]
 		accName := v.line["acc_name"]
 		password := v.line["password"]
@@ -71,16 +74,16 @@ func createJsonData(record []record) (string, error) {
 		secure_answer := v.line["secure_answer"]
 		email := v.line["email"]
 		phone_number := v.line["phone_number"]
-		obj := fmt.Sprintf(`{\"id\": %d, \"acc_name\":\"%s\", 
-			\"password\":\"%s\", 
-			\"secure_question\":\"%s\", 
-			\"secure_answer\":\"%s\",
-		   \"email\":\"%s\", 
-	       \"phone_number\":\"%s\"}`, id, accName, password, secure_question, secure_answer, email, phone_number)
+		obj := fmt.Sprintf(`{"id": %d, "acc_name":"%s", 
+			"password":"%s", 
+			"secure_question":"%s", 
+			"secure_answer":"%s",
+		   "email":"%s", 
+	       "phone_number":"%s"}`, id, accName, password, secure_question, secure_answer, email, phone_number)
 		objs = append(objs, obj)
 	}
 	jsonObjs := strings.Join(objs, ",")
-	json = jsonObjs + "]"
+	json = json + jsonObjs + `]`
 	return json, nil
 }
 
@@ -116,8 +119,9 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 
 	var result string
 	var isok bool = false
-	if conn == nil {
-		doResponse(reqId, appId, "connection is busy", false, 0)
+	if conn == nil || conn.connection == nil {
+		log.Println("conn ", *conn, " connection ", (*conn).connection)
+		doResponse(reqId, appId, "connection is busy and nil", false, 0)
 		return
 	}
 
@@ -184,7 +188,7 @@ func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json,
 }
 
 func makeRespHeader(appId, respId, result, data string) (string, error) {
-	header := fmt.Sprintf("{\"app_id\" : \"%s\", \"resp_id\": \"%s\", \"response_result\":\"%s\", \"data\":\"%s\"}", appId, respId, result, data)
+	header := fmt.Sprintf("{\"app_id\" : \"%s\", \"resp_id\": \"%s\", \"response_result\":\"%s\", \"data\":%s}", appId, respId, result, data)
 	return header, nil
 }
 
@@ -208,11 +212,11 @@ func doResponseWithData(reqId, appId, stringResult, data string, result bool, af
 	if err != nil {
 		log.Println("mq deliver msg failed")
 	}
-	log.Println("delivery response ", finalResp, " ok")
+	log.Println("delivery response ", string(finalResp), " ok")
 }
 
 func doResponse(reqId, appId, stringResult string, result bool, affectedRows int) {
-	ret := fmt.Sprintf("affect rows %d", affectedRows)
+	ret := fmt.Sprintf("\"affect rows %d\"", affectedRows)
 	doResponseWithData(reqId, appId, stringResult, ret, result, affectedRows)
 }
 
@@ -332,13 +336,21 @@ func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
 		log.Println("can't get connections for appid :", appId)
 		return
 	}
+
+	log.Println("app conns ", dbConns)
+
 	hash := getHashByKey(keyValue)
 	index := hash % len(dbConns)
+
 	var conn dbconnection
 	dbConns[index].stateLock.Lock()
-	if dbConns[index].state == 0 {
-		conn := dbConns[index]
+	if dbConns[index].state == connStateFree {
+		conn = dbConns[index]
+		log.Println("connection count ", len(dbConns), " hash index ", index, "conn ", conn)
 		conn.state = connStateInuse
+
+	} else {
+		log.Println("get connection failed , every connection is busy, state ", dbConns[index].state)
 	}
 	dbConns[index].stateLock.Unlock()
 
@@ -346,6 +358,7 @@ func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
 	case "READ":
 		dbHandleFunc["READ"](appId, reqId, keyName, keyValue, dataJson, &conn)
 	case "WRITE":
+		log.Println("connection!!!!! ", &conn)
 		dbHandleFunc["WRITE"](appId, reqId, keyName, keyValue, dataJson, &conn)
 	case "DELETE":
 		dbHandleFunc["DELETE"](appId, reqId, keyName, keyValue, dataJson, &conn)
@@ -362,6 +375,7 @@ func onReadMsg(msg *gtlmqhelper.MQMessage, userData interface{}) {
 	if !ok {
 		return
 	}
+	log.Println("on read msg conns ", dbconns)
 	processMqMessage(msg, dbconns)
 }
 
