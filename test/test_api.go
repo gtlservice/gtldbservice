@@ -47,6 +47,42 @@ func testRead(mq *gtlmqhelper.MQService) {
 	log.Println("deliver read msg success ", msg)
 }
 
+func testDelete(mq *gtlmqhelper.MQService) {
+	var msg = string(`{
+    "app_id":"gtlUserDb",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb94225522222",
+    "method":"DELETE",
+    "key_name":"acc_name",
+    "key_value":"maji",
+    "data":""}`)
+	err := mq.DeliveryMsg("text/json", "user_db.req", msg, len(msg))
+	if err != nil {
+		log.Println("delivery msg error ", err)
+	}
+	log.Println("deliver delete msg success ", msg)
+}
+
+func testUpdate(mq *gtlmqhelper.MQService) {
+	var msg = string(`{
+    "app_id":"gtlUserDb",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb9422553333",
+    "method":"UPDATE",
+    "key_name":"acc_name",
+    "key_value":"maji",
+    "data":{"acc_name":"maji",
+            "password":"update",
+            "secure_question": "我的生日",
+            "secure_answer":"199111110/09/15",
+            "email":"te1111111st@gmail.com",
+            "phone_number":"186921111110298475"}
+    }`)
+	err := mq.DeliveryMsg("text/json", "user_db.req", msg, len(msg))
+	if err != nil {
+		log.Println("delivery msg error ", err)
+	}
+	log.Println("deliver delete msg success ", msg)
+}
+
 func main() {
 	mq, err := gtlmqhelper.New("amqp://guest:guest@127.0.0.1:5672", "userdb_exchange", 2)
 	if err != nil {
@@ -61,9 +97,13 @@ func main() {
 
 	mq.DoConsumer(onRead, mq)
 
-	go testWrite(mq)
+	testWrite(mq)
 
-	go testRead(mq)
+	testRead(mq)
+
+	testUpdate(mq)
+
+	testDelete(mq)
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

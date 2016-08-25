@@ -181,10 +181,73 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 
 func handleDelete(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 
+	if conn == nil || conn.connection == nil {
+		doResponse(reqId, appId, "connection is busy and nil", false, 0)
+		return
+	}
+	db, ok := conn.connection.(*MysqlInstance)
+	if !ok {
+		log.Println("connection error when delete")
+		return
+	}
+	affected, err := db.deleteUserInfo(keyName, keyValue)
+	if err != nil {
+		log.Println("delete error")
+		doResponse(reqId, appId, "delete error", false, 0)
+		return
+	}
+	doResponse(reqId, appId, "ok", true, affected)
 }
 
 func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
+	if conn == nil || conn.connection == nil {
+		doResponse(reqId, appId, "connection is busy and nil", false, 0)
+		return
+	}
+	db, ok := conn.connection.(*MysqlInstance)
+	if !ok {
+		log.Println("connection error when update")
+		return
+	}
 
+	acc_name, err := data.Get("acc_name").String()
+	if err != nil {
+		log.Println("get acc_name err", err)
+		doResponse(reqId, appId, "acc_name is error", false, 0)
+		return
+	}
+	password, err := data.Get("password").String()
+	if err != nil {
+		log.Println("get password err", err)
+		doResponse(reqId, appId, "password is error", false, 0)
+		return
+	}
+	secureQuestion, err := data.Get("secure_question").String()
+	if err != nil {
+		log.Println("get secure_question failed")
+	}
+	secureAnswer, err := data.Get("secure_answer").String()
+	if err != nil {
+		log.Println("get secure_answer failed")
+	}
+	email, err := data.Get("email").String()
+	if err != nil {
+		log.Println("get email failed")
+		doResponse(reqId, appId, "email is error", false, 0)
+		return
+	}
+	phoneNumber, err := data.Get("phone_number").String()
+	if err != nil {
+		log.Println("get phone number failed")
+	}
+
+	affected, err := db.updateUserInfo(keyName, keyValue, acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
+	if err != nil {
+		log.Println("update error")
+		doResponse(reqId, appId, "update error", false, 0)
+		return
+	}
+	doResponse(reqId, appId, "ok", true, affected)
 }
 
 func makeRespHeader(appId, respId, result, data string) (string, error) {

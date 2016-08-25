@@ -20,13 +20,14 @@ secure_answer char(50),
 email char(30) not null,
 phone_number char(20)
 );
+alter table user_info charset=utf8; 
 
 //添加用户
 {//request
 'app_id':'gtlUserDb',
 'req_id':"6e760338-5eb3-4858-a4a7-7eb942255e8c"
 'method':"WRITE"
-'key_name':"name"  //username as hash key
+'key_name':"acc_name"  //username as hash key
 'key_value''maji'
 'data':"{"acc_name":"maji",
 		"password":"123",

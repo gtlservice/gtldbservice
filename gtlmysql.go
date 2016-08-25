@@ -93,6 +93,7 @@ func (m *MysqlInstance) execMysqlUpdate(sqlstr string) (int, error) {
 	if err != nil {
 		return 0, errors.New("update failed2")
 	}
+	log.Println("update affected rows ", aff)
 	return int(aff), nil
 }
 
@@ -156,4 +157,25 @@ func (m *MysqlInstance) readUserInfo(key, keyValue string) (int, []record, error
 		cnt++
 	}
 	return cnt, m.data, nil
+}
+
+func (m *MysqlInstance) deleteUserInfo(key, keyValue string) (int, error) {
+	var sql string = "delete from user_info where %s = '%s'"
+	sql = fmt.Sprintf(sql, key, keyValue)
+	affected, err := m.execMysqlDelete(sql)
+	if err != nil {
+		return 0, errors.New("delete error")
+	}
+	return affected, nil
+}
+
+func (m *MysqlInstance) updateUserInfo(key, keyValue, accName, password, secure_question, secure_answer, email, phone_number string) (int, error) {
+	var sql string = "update  user_info set acc_name = '%s', password = '%s', secure_question = '%s', secure_answer='%s', email = '%s', phone_number='%s' where %s = '%s'"
+	sql = fmt.Sprintf(sql, accName, password, secure_question, secure_answer, email, phone_number, key, keyValue)
+	log.Println("update sql:", sql)
+	affected, err := m.execMysqlUpdate(sql)
+	if err != nil {
+		return 0, errors.New("update error")
+	}
+	return affected, nil
 }
