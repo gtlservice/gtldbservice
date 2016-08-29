@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"gtlservice/gtldbservice/mqHelper"
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 )
 
 func onRead(mqMsg *gtlmqhelper.MQMessage, userData interface{}) {
@@ -14,7 +16,7 @@ func onRead(mqMsg *gtlmqhelper.MQMessage, userData interface{}) {
 func testWrite(mq *gtlmqhelper.MQService) {
 	var msg = string(`{
     "app_id":"gtlUserDb",
-    "req_id":"6e760338-5eb3-4858-a4a7-7eb942255e8c",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb94211111",
     "method":"WRITE",
     "key_name":"name",
     "key_value":"maji",
@@ -35,7 +37,7 @@ func testWrite(mq *gtlmqhelper.MQService) {
 func testRead(mq *gtlmqhelper.MQService) {
 	var msg = string(`{
     "app_id":"gtlUserDb",
-    "req_id":"6e760338-5eb3-4858-a4a7-7eb942255111",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb942255222",
     "method":"READ",
     "key_name":"acc_name",
     "key_value":"maji",
@@ -50,7 +52,7 @@ func testRead(mq *gtlmqhelper.MQService) {
 func testDelete(mq *gtlmqhelper.MQService) {
 	var msg = string(`{
     "app_id":"gtlUserDb",
-    "req_id":"6e760338-5eb3-4858-a4a7-7eb94225522222",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb9422553333",
     "method":"DELETE",
     "key_name":"acc_name",
     "key_value":"maji",
@@ -65,7 +67,7 @@ func testDelete(mq *gtlmqhelper.MQService) {
 func testUpdate(mq *gtlmqhelper.MQService) {
 	var msg = string(`{
     "app_id":"gtlUserDb",
-    "req_id":"6e760338-5eb3-4858-a4a7-7eb9422553333",
+    "req_id":"6e760338-5eb3-4858-a4a7-7eb9422554444",
     "method":"UPDATE",
     "key_name":"acc_name",
     "key_value":"maji",
@@ -84,6 +86,7 @@ func testUpdate(mq *gtlmqhelper.MQService) {
 }
 
 func main() {
+
 	mq, err := gtlmqhelper.New("amqp://guest:guest@127.0.0.1:5672", "userdb_exchange", 2)
 	if err != nil {
 		log.Println("connect mq failed")
@@ -97,13 +100,34 @@ func main() {
 
 	mq.DoConsumer(onRead, mq)
 
-	testWrite(mq)
+	arg_num := len(os.Args)
+	fmt.Printf("the num of input is %d\n", arg_num)
+	for i := 0; i < arg_num; i++ {
+		if strings.EqualFold(os.Args[i], "read") {
+			for i := 0; i < 10; i++ {
+				go testRead(mq)
+			}
 
-	testRead(mq)
+		} else if strings.EqualFold(os.Args[i], "write") {
+			for i := 0; i < 10; i++ {
+				go testWrite(mq)
+			}
 
-	testUpdate(mq)
+		} else if strings.EqualFold(os.Args[i], "update") {
+			for i := 0; i < 10; i++ {
+				go testUpdate(mq)
+			}
 
-	testDelete(mq)
+		} else if strings.EqualFold(os.Args[i], "delete") {
+			for i := 0; i < 10; i++ {
+				go testDelete(mq)
+			}
+
+		} else {
+			fmt.Println("args is not valid")
+		}
+
+	}
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, os.Interrupt)

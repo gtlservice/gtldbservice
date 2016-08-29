@@ -35,9 +35,9 @@ type mqConfig struct {
 }
 
 type dbinstance struct {
-	Dburl  string
-	Index  int
-	DbType string
+	Dburl   string
+	DbType  string
+	connCnt int
 }
 
 type dbconnection struct {
@@ -46,6 +46,7 @@ type dbconnection struct {
 	hashIndex  int
 	state      int //0 free 1 inuse
 	stateLock  *sync.Mutex
+	usingTimes int
 }
 
 type handleFunc func(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection)
@@ -87,9 +88,21 @@ func createJsonData(record []record) (string, error) {
 	return json, nil
 }
 
+func releaseConnection(conn *dbconnection) {
+	conn.stateLock.Lock()
+	conn.state = connStateFree
+	conn.stateLock.Unlock()
+}
+
 //id acc_name password secure_question secure_answer email phone_number
 func handleRead(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
 	db, ok := conn.connection.(*MysqlInstance)
+	if conn.connection == nil {
+		log.Println("conn ", *conn, " connection ", (*conn).connection)
+		doResponse(reqId, appId, "connection is busy and nil", false, 0)
+		return
+	}
+	defer releaseConnection(conn)
 	if !ok {
 		log.Println("read failed ")
 		doResponse(reqId, appId, "connection is error", false, 0)
@@ -119,7 +132,8 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 
 	var result string
 	var isok bool = false
-	if conn == nil || conn.connection == nil {
+	defer releaseConnection(conn)
+	if conn.connection == nil {
 		log.Println("conn ", *conn, " connection ", (*conn).connection)
 		doResponse(reqId, appId, "connection is busy and nil", false, 0)
 		return
@@ -159,9 +173,6 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 	db, ok := conn.connection.(*MysqlInstance)
 	if ok {
 		aff, err := db.writeUserInfo(acc_name, password, secureQuestion, secureAnswer, email, phoneNumber)
-		conn.stateLock.Lock()
-		conn.state = connStateFree
-		conn.stateLock.Unlock()
 		if err != nil {
 			log.Println("write userinfo failed", err)
 			result = "insert user info failed"
@@ -172,7 +183,6 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 			isok = true
 		}
 		doResponse(reqId, appId, result, isok, aff)
-
 	} else {
 		log.Println("execute write failed, connection error: ", conn.connection)
 	}
@@ -180,11 +190,13 @@ func handleWrite(appId, reqId, keyName, keyValue string, data *simplejson.Json, 
 }
 
 func handleDelete(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
-
-	if conn == nil || conn.connection == nil {
+	defer releaseConnection(conn)
+	if conn.connection == nil {
+		log.Println("conn ", *conn, " connection ", (*conn).connection)
 		doResponse(reqId, appId, "connection is busy and nil", false, 0)
 		return
 	}
+
 	db, ok := conn.connection.(*MysqlInstance)
 	if !ok {
 		log.Println("connection error when delete")
@@ -200,10 +212,13 @@ func handleDelete(appId, reqId, keyName, keyValue string, data *simplejson.Json,
 }
 
 func handleUpdate(appId, reqId, keyName, keyValue string, data *simplejson.Json, conn *dbconnection) {
-	if conn == nil || conn.connection == nil {
+	defer releaseConnection(conn)
+	if conn.connection == nil {
+		log.Println("conn ", *conn, " connection ", (*conn).connection)
 		doResponse(reqId, appId, "connection is busy and nil", false, 0)
 		return
 	}
+
 	db, ok := conn.connection.(*MysqlInstance)
 	if !ok {
 		log.Println("connection error when update")
@@ -336,7 +351,7 @@ func getHashByKey(key string) int {
 	return hash
 }
 
-func getAppDbs(appId string, conns []dbconnection) []dbconnection {
+func getAppMapDbs(appId string, conns []dbconnection) []dbconnection {
 	dbType := apiServerConfig.appDBTypeMap[appId]
 	var dbTypeIndex int
 	switch dbType {
@@ -357,6 +372,24 @@ func getAppDbs(appId string, conns []dbconnection) []dbconnection {
 	return selectedConns
 }
 
+func hashGetMySqlConn(conns []dbconnection, hash int) *dbconnection {
+	var connCnt int = len(conns)
+	var index int = hash % connCnt
+	conn := conns[index]
+	conn.stateLock.Lock()
+	defer conn.stateLock.Unlock()
+
+	_, ok := conn.connection.(*MysqlInstance)
+	if !ok {
+		return nil
+	}
+	if conn.state == connStateFree {
+		conn.state = connStateInuse
+		return &conn
+	}
+	return nil
+}
+
 func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
 	log.Println("msg content", string(msg.Body))
 	json, err := simplejson.NewJson(msg.Body)
@@ -372,61 +405,58 @@ func processMqMessage(msg *gtlmqhelper.MQMessage, conns []dbconnection) {
 	reqId, err := json.Get("req_id").String()
 	if err != nil {
 		log.Println("get req_id  failed")
+		doResponse(reqId, appId, "request format error", false, 0)
 		return
 	}
 	method, err := json.Get("method").String()
 	if err != nil {
 		log.Println("get method  failed")
+		doResponse(reqId, appId, "request format error", false, 0)
 		return
 	}
 	keyName, err := json.Get("key_name").String()
 	if err != nil {
 		log.Println("get key_name  failed")
+		doResponse(reqId, appId, "request format error", false, 0)
 		return
 	}
 	keyValue, err := json.Get("key_value").String()
 	if err != nil {
 		log.Println("get key_value  failed")
+		doResponse(reqId, appId, "request format error", false, 0)
 		return
 	}
 	dataJson := json.Get("data")
 	if dataJson == nil {
 		log.Println("get data  failed")
+		doResponse(reqId, appId, "request format error", false, 0)
 		return
 	}
-	dbConns := getAppDbs(appId, conns)
-	if len(dbConns) == 0 {
+	dbconns := getAppMapDbs(appId, conns)
+	if len(dbconns) == 0 {
 		log.Println("can't get connections for appid :", appId)
+		doResponse(reqId, appId, "connection map error", false, 0)
 		return
 	}
-
-	log.Println("app conns ", dbConns)
 
 	hash := getHashByKey(keyValue)
-	index := hash % len(dbConns)
-
-	var conn dbconnection
-	dbConns[index].stateLock.Lock()
-	if dbConns[index].state == connStateFree {
-		conn = dbConns[index]
-		log.Println("connection count ", len(dbConns), " hash index ", index, "conn ", conn)
-		conn.state = connStateInuse
-
-	} else {
-		log.Println("get connection failed , every connection is busy, state ", dbConns[index].state)
+	log.Println("hash value is ", hash)
+	dbconn := hashGetMySqlConn(dbconns, hash)
+	if dbconn == nil {
+		doResponse(reqId, appId, "connection is busy", false, 0)
+		return
 	}
-	dbConns[index].stateLock.Unlock()
 
 	switch method {
 	case "READ":
-		dbHandleFunc["READ"](appId, reqId, keyName, keyValue, dataJson, &conn)
+		dbHandleFunc["READ"](appId, reqId, keyName, keyValue, dataJson, dbconn)
 	case "WRITE":
-		log.Println("connection!!!!! ", &conn)
-		dbHandleFunc["WRITE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+		log.Println("connection!!!!! ", dbconn)
+		dbHandleFunc["WRITE"](appId, reqId, keyName, keyValue, dataJson, dbconn)
 	case "DELETE":
-		dbHandleFunc["DELETE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+		dbHandleFunc["DELETE"](appId, reqId, keyName, keyValue, dataJson, dbconn)
 	case "UPDATE":
-		dbHandleFunc["UPDATE"](appId, reqId, keyName, keyValue, dataJson, &conn)
+		dbHandleFunc["UPDATE"](appId, reqId, keyName, keyValue, dataJson, dbconn)
 	default:
 		log.Println("unknown method")
 	}
@@ -459,22 +489,32 @@ func doNoSQLConnection(url string) interface{} {
 
 func initDbConnection(config *mqConfig) ([]dbconnection, error) {
 	var dbconnectons []dbconnection
+	var connectionCnt int = 0
 	dbs := config.dblist
 	for _, db := range dbs {
 		var conn dbconnection
 		switch db.DbType {
 		case "mysql":
-			conn.connection = doMySQLConnection(db.Dburl)
-			conn.connType = dbTypemysql
-			conn.hashIndex = db.Index
-			conn.stateLock = new(sync.Mutex)
-			conn.state = connStateFree
+			for i := 0; i < db.connCnt; i++ {
+				conn.connection = doMySQLConnection(db.Dburl)
+				conn.connType = dbTypemysql
+				conn.hashIndex = connectionCnt
+				conn.stateLock = new(sync.Mutex)
+				conn.state = connStateFree
+				dbconnectons = append(dbconnectons, conn)
+				log.Println("connect mysql ", db.Dburl, " success!!!", connectionCnt)
+				connectionCnt++
+			}
 		case "mongo":
-			conn.connection = doNoSQLConnection(db.Dburl)
-			conn.connType = dbTypeMongo
-			conn.hashIndex = db.Index
-			conn.stateLock = new(sync.Mutex)
-			conn.state = connStateFree
+			for i := 0; i < db.connCnt; i++ {
+				conn.connection = doNoSQLConnection(db.Dburl)
+				conn.connType = dbTypeMongo
+				conn.hashIndex = connectionCnt
+				conn.stateLock = new(sync.Mutex)
+				conn.state = connStateFree
+				log.Println("connect nosql ", db.Dburl, " success!!!", connectionCnt)
+				connectionCnt++
+			}
 		default:
 			log.Println("unknown sql type", db.DbType)
 			return nil, errors.New("unknown sql type")
@@ -503,7 +543,7 @@ func readConfig() *mqConfig {
 		log.Println("new simple json failed ", err)
 		return nil
 	}
-	config.MqURL, err = json.Get("MqURL").String()
+	config.MqURL, err = json.Get("MQURL").String()
 	if err != nil {
 		log.Println("parse mqurl failed")
 		return nil
@@ -547,18 +587,17 @@ func readConfig() *mqConfig {
 			break
 		}
 		db.Dburl = dburl
-		index, err := dblist.GetIndex(i).Get("index").Int()
-		if err != nil {
-			break
-		}
-		db.Index = index
 		dbtype, err := dblist.GetIndex(i).Get("dbtype").String()
 		if err != nil {
 			break
 		}
+		connCnt, err := dblist.GetIndex(i).Get("cnt").Int()
+		if err != nil {
+			break
+		}
 		db.DbType = dbtype
+		db.connCnt = connCnt
 		dbs = append(dbs, db)
-		log.Println("get db", db)
 	}
 
 	config.dblist = dbs
