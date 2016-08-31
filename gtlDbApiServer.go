@@ -505,7 +505,7 @@ func initDbConnection(config *mqConfig) ([]dbconnection, error) {
 				log.Println("connect mysql ", db.Dburl, " success!!!", connectionCnt)
 				connectionCnt++
 			}
-		case "mongo":
+		case "nosql":
 			for i := 0; i < db.connCnt; i++ {
 				conn.connection = doNoSQLConnection(db.Dburl)
 				conn.connType = dbTypeMongo

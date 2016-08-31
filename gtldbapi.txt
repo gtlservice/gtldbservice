@@ -53,7 +53,7 @@ alter table user_info charset=utf8;
 'app_id':'gtlUserDb',
 'req_id':"63662f1b-d7a4-481c-b0a1-7f964f26f681"
 'method':"READ"
-'key_name':"name"  //username as hash key
+'key_name':"acc_name"  //username as hash key
 'key_value''maji'
 }
 
@@ -63,7 +63,7 @@ alter table user_info charset=utf8;
 'appid':'gtlUserDb',
 'respid':"63662f1b-d7a4-481c-b0a1-7f964f26f681"
 'response_result':"OK" //or error and reason
-'data':"{"name":"maji",
+'data':"{"acc_name":"maji",
 		"password":"123",
 		"secure_question": "我的生日",
 		"secure_answer":"1990/09/15",
@@ -77,10 +77,10 @@ alter table user_info charset=utf8;
 'appid':'gtlUserDb',
 'reqid':"e4dd6eeb-afdd-47bd-b65a-48d9a62ccaad"
 'method':"UPDATE"
-'key_name':"name"  //username as hash key
+'key_name':"acc_name"  //username as hash key
 'key_value''maji'
 'data':'{
-	    "name":"maji",
+	    "acc_name":"maji",
 		"password":"12354678",
 		"secure_question": "我的生日",
 		"secure_answer":"1990/09/15",
@@ -103,7 +103,7 @@ alter table user_info charset=utf8;
 'app_id':'gtlUserDb',
 'req_id':"09afa7ea-62a4-451c-992c-92757dff7b0c"
 'method':"DELETE"
-'key_name':"name"  //username as hash key
+'key_name':"acc_name"  //username as hash key
 'key_value''maji'
 }
 
@@ -116,5 +116,95 @@ alter table user_info charset=utf8;
 }
 
 
+////////////////////////////////////////////////////////////////////////////////////
+no sql
+
+//添加数据
+{//request
+'app_id':'gtldoc',
+'req_id':"6e760338-5eb3-4858-a4a7-7eb942255e8c"
+'method':"WRITE"
+'key_name':"doc_name"  //username as hash key
+'key_value''test1'
+'data':"{"doc_name":"test1",
+		"test1":"test1111",
+		"test2": "test1111444444",
+		"test3":"test1111123123123",
+		"test4":"test11114252352532535"
+	 }"
+}
+
+
+//添加用户响应
+{//response
+'app_id':'gtldoc',
+'resp_id':"6e760338-5eb3-4858-a4a7-7eb942255e8c"
+'response_result':"OK" //or error and reason
+'data':''
+}
+
+
+//查找用户
+{//request
+'app_id':'gtlUserDb',
+'req_id':"63662f1b-d7a4-481c-b0a1-7f964f26f681"
+'method':"READ"
+'key_name':"acc_name"  //username as hash key
+'key_value''maji'
+}
+
+
+//查找用户响应
+{//response
+'appid':'gtlUserDb',
+'respid':"63662f1b-d7a4-481c-b0a1-7f964f26f681"
+'response_result':"OK" //or error and reason
+'data':"{"acc_name":"maji",
+		"password":"123",
+		"secure_question": "我的生日",
+		"secure_answer":"1990/09/15",
+		"email":"test@gmail.com",
+		"phone_number":"186920298475"
+	 }"
+}
+
+//更新用户,必须要传入此用户的所有列的信息进行更新
+{//request
+'appid':'gtlUserDb',
+'reqid':"e4dd6eeb-afdd-47bd-b65a-48d9a62ccaad"
+'method':"UPDATE"
+'key_name':"acc_name"  //old key name key value
+'key_value''maji'
+'data':'{//new key name and key value
+	    "key_name":"maji",
+		"key_value":"liubo"
+}'
+}
+
+//更新用户响应
+{//response
+'app_id':'gtlUserDb',
+'resp_id':"e4dd6eeb-afdd-47bd-b65a-48d9a62ccaad"
+'response_result':"OK" //or error and reason
+'affect-rows':1
+}
+
+
+//删除用户
+{//request
+'app_id':'gtlUserDb',
+'req_id':"09afa7ea-62a4-451c-992c-92757dff7b0c"
+'method':"DELETE"
+'key_name':"acc_name"  //username as hash key
+'key_value''maji'
+}
+
+//删除用户响应
+{//response
+'app_id':'gtlUserDb',
+'resp_id':"09afa7ea-62a4-451c-992c-92757dff7b0c"
+'response_result':"OK" //or error and reason
+'affect-rows':1
+}
 
 
